@@ -83,6 +83,14 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
                  scaled_params_.speed_scaling_interface_name.c_str());
   }
 
+  if (use_stopping_) {
+    const double from_0_0_to_1_0 = 5.0;  // 1 second []
+    const double scaling_factor_increment = period.seconds() / from_0_0_to_1_0;
+    stopping_scaling_factor_ -= scaling_factor_increment;
+    stopping_scaling_factor_ = std::max(0.0, stopping_scaling_factor_);
+    scaling_factor_ = stopping_scaling_factor_;
+  }
+
   if (get_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE) {
     return controller_interface::return_type::OK;
   }
@@ -125,19 +133,25 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
     }
   };
 
+  auto assign_scaled_interface_from_point = [&](auto& joint_interface,
+                                                const std::vector<double>& trajectory_point_interface, double scaling) {
+    for (size_t index = 0; index < dof_; ++index) {
+      joint_interface[index].get().set_value(trajectory_point_interface[index] * scaling);
+    }
+  };
+
   // current state update
   state_current_.time_from_start.set__sec(0);
   read_state_from_hardware(state_current_);
 
   // currently carrying out a trajectory
   if (traj_point_active_ptr_ && (*traj_point_active_ptr_)->has_trajectory_msg()) {
-    
     TimeData time_data;
     time_data.time = time;
-    rcl_duration_value_t nsec_period = period.nanoseconds();                                
+    rcl_duration_value_t nsec_period = period.nanoseconds();
     time_data.period = rclcpp::Duration::from_nanoseconds(scaling_factor_ * nsec_period);
     time_data.uptime = time_data_.readFromRT()->uptime + time_data.period;
-    
+
     rclcpp::Time traj_time = time_data_.readFromRT()->uptime + period;
     time_data_.writeFromNonRT(time_data);
 
@@ -213,11 +227,12 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
           if (use_closed_loop_pid_adapter_) {
             assign_interface_from_point(joint_command_interface_[1], tmp_command_);
           } else {
-            assign_interface_from_point(joint_command_interface_[1], state_desired_.velocities);
+            assign_scaled_interface_from_point(joint_command_interface_[1], state_desired_.velocities, scaling_factor_);
           }
         }
         if (has_acceleration_command_interface_) {
-          assign_interface_from_point(joint_command_interface_[2], state_desired_.accelerations);
+          assign_scaled_interface_from_point(joint_command_interface_[2], state_desired_.accelerations,
+                                             scaling_factor_);
         }
         if (has_effort_command_interface_) {
           assign_interface_from_point(joint_command_interface_[3], tmp_command_);
