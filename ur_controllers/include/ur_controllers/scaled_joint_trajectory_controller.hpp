@@ -63,6 +63,9 @@ public:
 
   void set_hold_position() override
   {
+    scaled_param_listener_->refresh_dynamic_parameters();
+    scaled_params_ = scaled_param_listener_->get_params();
+
     bool stopped = false;
 
     stopping_scaling_factor_ = scaling_factor_;

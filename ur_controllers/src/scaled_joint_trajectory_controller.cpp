@@ -84,7 +84,7 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
   }
 
   if (use_stopping_) {
-    const double from_0_0_to_1_0 = 5.0;  // 1 second []
+    const double from_0_0_to_1_0 = scaled_params_.scaling_factor_ramp_0_0_to_1_0;
     const double scaling_factor_increment = period.seconds() / from_0_0_to_1_0;
     stopping_scaling_factor_ -= scaling_factor_increment;
     stopping_scaling_factor_ = std::max(0.0, stopping_scaling_factor_);
