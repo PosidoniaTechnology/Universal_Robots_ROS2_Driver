@@ -44,6 +44,10 @@
 #include "rclcpp/time.hpp"
 #include "rclcpp/duration.hpp"
 #include "scaled_joint_trajectory_controller_parameters.hpp"
+#include "lifecycle_msgs/msg/state.hpp"
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
+#include "rclcpp_lifecycle/state.hpp"
 
 namespace ur_controllers
 {
@@ -60,6 +64,8 @@ public:
   controller_interface::return_type update(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
   CallbackReturn on_init() override;
+
+
 
   void set_hold_position() override
   {
@@ -97,6 +103,33 @@ protected:
     rclcpp::Duration period;
     rclcpp::Time uptime;
   };
+
+    rclcpp_action::GoalResponse goal_received_callback(
+            const rclcpp_action::GoalUUID &, std::shared_ptr<const FollowJTrajAction::Goal> goal)
+    {
+        RCLCPP_INFO(get_node()->get_logger(), "Received new action goal");
+
+        if (use_stopping_){
+            RCLCPP_ERROR(get_node()->get_logger(), "Stopping active, rejecting goal");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+
+        // Precondition: Running controller
+        if (get_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE)
+        {
+            RCLCPP_ERROR(
+                    get_node()->get_logger(), "Can't accept new action goals. Controller is not running.");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+
+        if (!validate_trajectory_msg(goal->trajectory))
+        {
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+
+        RCLCPP_INFO(get_node()->get_logger(), "Accepted new action goal");
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    }
 
 private:
   double scaling_factor_{};
