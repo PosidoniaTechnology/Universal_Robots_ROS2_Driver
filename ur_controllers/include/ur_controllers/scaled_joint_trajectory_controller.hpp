@@ -77,7 +77,7 @@ public:
     stopping_scaling_factor_ = scaling_factor_;
     use_stopping_ = true;
 
-    while (!stopped && rclcpp::ok()) {
+    while (!stopped && rclcpp::ok() && (traj_point_active_ptr_ != nullptr)) {
       stopped = std::all_of(state_current_.velocities.begin(), state_current_.velocities.end(),
                             [=](const double v) { return std::abs(v) < 1e-6; });
 
@@ -129,6 +129,38 @@ protected:
 
         RCLCPP_INFO(get_node()->get_logger(), "Accepted new action goal");
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    }
+
+    rclcpp_action::CancelResponse goal_cancelled_callback(
+            const std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle)
+    {
+        RCLCPP_INFO(get_node()->get_logger(), "Got request to cancel goal");
+
+        // Check that cancel request refers to currently active goal (if any)
+        const auto active_goal = *rt_active_goal_.readFromNonRT();
+        if (active_goal && active_goal->gh_ == goal_handle)
+        {
+            // Controller uptime
+            // Enter hold current position mode
+            // can last longer so it can actually succeed in between
+            set_hold_position();
+
+            RCLCPP_DEBUG(
+                    get_node()->get_logger(), "Canceling active action goal because cancel callback received.");
+
+            // check if it is still active
+            const auto active_goal = *rt_active_goal_.readFromNonRT();
+            if (active_goal && active_goal->gh_ == goal_handle) {
+
+                // Mark the current goal as canceled
+                auto action_res = std::make_shared<FollowJTrajAction::Result>();
+                active_goal->setCanceled(action_res);
+                rt_active_goal_.writeFromNonRT(RealtimeGoalHandlePtr());
+            }else{
+                return rclcpp_action::CancelResponse::REJECT;
+            }
+        }
+        return rclcpp_action::CancelResponse::ACCEPT;
     }
 
 private:
