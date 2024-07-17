@@ -19,6 +19,10 @@ find_package(std_srvs REQUIRED)
 find_package(ur_dashboard_msgs REQUIRED)
 find_package(ur_msgs REQUIRED)
 find_package(generate_parameter_library REQUIRED)
+find_package(kinematics_interface REQUIRED)
+find_package(tf2_eigen REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2_kdl REQUIRED)
 
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   angles
@@ -34,6 +38,10 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   ur_dashboard_msgs
   ur_msgs
   generate_parameter_library
+  kinematics_interface
+  tf2_eigen
+  tf2_geometry_msgs
+  tf2_kdl
 )
 
 include_directories(include)
