@@ -51,6 +51,43 @@ controller_interface::CallbackReturn ScaledJointTrajectoryController::on_init()
   scaled_param_listener_ = std::make_shared<scaled_joint_trajectory_controller::ParamListener>(get_node());
   scaled_params_ = scaled_param_listener_->get_params();
 
+    // Load the differential IK plugin
+    if (!scaled_params_.kinematics.plugin_name.empty())
+    {
+        try
+        {
+            kinematics_loader_ =
+                    std::make_shared<pluginlib::ClassLoader<kinematics_interface::KinematicsInterface>>(
+                            scaled_params_.kinematics.plugin_package, "kinematics_interface::KinematicsInterface");
+            kinematics_ = std::unique_ptr<kinematics_interface::KinematicsInterface>(
+                    kinematics_loader_->createUnmanagedInstance(scaled_params_.kinematics.plugin_name));
+            if (!kinematics_->initialize(
+                    get_node()->get_node_parameters_interface(), scaled_params_.kinematics.tip))
+            {
+                cartesian_soft_axis_in_use_ = false;
+            }else
+            {
+                cartesian_soft_axis_in_use_ = true;
+            }
+        }
+        catch (pluginlib::PluginlibException & ex)
+        {
+            RCLCPP_ERROR(
+                    get_node()->get_logger(), "Exception while loading the IK plugin '%s': '%s'",
+                    scaled_params_.kinematics.plugin_name.c_str(), ex.what());
+            cartesian_soft_axis_in_use_ = false;
+        }
+    }
+    else
+    {
+        RCLCPP_ERROR(
+                get_node()->get_logger(),
+                "A differential IK plugin name was not specified in the config file.");
+        cartesian_soft_axis_in_use_ = false;
+    }
+
+    kill_all_ = false;
+
   return JointTrajectoryController::on_init();
 }
 
@@ -70,12 +107,45 @@ controller_interface::CallbackReturn ScaledJointTrajectoryController::on_activat
   time_data.period = rclcpp::Duration::from_nanoseconds(0);
   time_data.uptime = get_node()->now();
   time_data_.initRT(time_data);
+
+  kill_all_ = false;
+  cartesian_check_thread_ = std::make_unique<std::thread>([this] { cartesianCheckThread(); });
+
   return JointTrajectoryController::on_activate(state);
+}
+
+controller_interface::CallbackReturn ScaledJointTrajectoryController::on_deactivate(const rclcpp_lifecycle::State& state)
+{
+    kill_all_ = true;
+    const auto tmp = JointTrajectoryController::on_deactivate(state);
+    cartesian_check_thread_->join();
+    return tmp;
+}
+
+void ScaledJointTrajectoryController::cartesianCheckThread() {
+
+    while(rclcpp::ok() && !kill_all_){
+
+        if(traj_point_active_ptr_ && (*traj_point_active_ptr_)->has_trajectory_msg()){
+
+            // check cartesian soft axis limits
+            const bool ik_success = kinematics_->calculate_link_transform(
+                    state_desired_.positions, scaled_params_.kinematics.tip,
+                    cartesian_check_matrix_);
+
+            const double cartesian_x = cartesian_check_matrix_.translation().x();
+            const double cartesian_y = cartesian_check_matrix_.translation().y();
+            const double cartesian_z = cartesian_check_matrix_.translation().z();
+
+            
+        }
+
+    }
 }
 
 controller_interface::return_type ScaledJointTrajectoryController::update(const rclcpp::Time& time,
                                                                           const rclcpp::Duration& period)
-{
+{std::cerr<<cartesian_soft_axis_in_use_<<std::endl;
   if (state_interfaces_.back().get_name() == scaled_params_.speed_scaling_interface_name) {
     scaling_factor_ = state_interfaces_.back().get_value();
   } else {
@@ -85,7 +155,7 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
 
   if (use_stopping_) {
     const double from_0_0_to_1_0 = scaled_params_.scaling_factor_ramp_0_0_to_1_0;
-    const double scaling_factor_increment = period.seconds() / from_0_0_to_1_0;
+    const double scaling_factor_increment = period.seconds() / from_0_0_to_1_0; // TODO(livanov93) What if it is zero? handle edge case
     stopping_scaling_factor_ -= scaling_factor_increment;
     stopping_scaling_factor_ = std::max(0.0, stopping_scaling_factor_);
     scaling_factor_ = stopping_scaling_factor_;

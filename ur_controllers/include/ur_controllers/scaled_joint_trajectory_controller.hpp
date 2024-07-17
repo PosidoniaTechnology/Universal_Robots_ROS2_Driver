@@ -48,6 +48,8 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "kinematics_interface/kinematics_interface.hpp"
+#include "pluginlib/class_loader.hpp"
 
 namespace ur_controllers
 {
@@ -60,6 +62,7 @@ public:
   controller_interface::InterfaceConfiguration state_interface_configuration() const override;
 
   controller_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State& state) override;
+  controller_interface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
 
   controller_interface::return_type update(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
@@ -127,6 +130,8 @@ protected:
             return rclcpp_action::GoalResponse::REJECT;
         }
 
+        // check with IK if we are over zones
+
         RCLCPP_INFO(get_node()->get_logger(), "Accepted new action goal");
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     }
@@ -171,6 +176,17 @@ private:
 
   std::shared_ptr<scaled_joint_trajectory_controller::ParamListener> scaled_param_listener_;
   scaled_joint_trajectory_controller::Params scaled_params_;
+
+  // Kinematics interface plugin loader
+  std::atomic<bool> kill_all_ = false;
+  std::shared_ptr<pluginlib::ClassLoader<kinematics_interface::KinematicsInterface>> kinematics_loader_;
+  std::unique_ptr<kinematics_interface::KinematicsInterface> kinematics_;
+  std::atomic<bool> cartesian_soft_axis_in_use_ = false;
+  Eigen::Isometry3d cartesian_check_matrix_;
+  std::unique_ptr<std::thread> cartesian_check_thread_;
+
+  void cartesianCheckThread();
+
 };
 }  // namespace ur_controllers
 
