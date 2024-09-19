@@ -334,9 +334,7 @@ def launch_setup(context, *args, **kwargs):
 
     controllers_active = [
         "joint_state_broadcaster",
-        "io_and_status_controller",
-        "speed_scaling_state_broadcaster",
-        "force_torque_sensor_broadcaster",
+        "cartesian_to_joint_converter"
     ]
     controllers_inactive = ["forward_position_controller"]
 
@@ -371,6 +369,25 @@ def launch_setup(context, *args, **kwargs):
         condition=UnlessCondition(activate_joint_controller),
     )
 
+    cartesian_to_joint_converter_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[
+            "cartesian_to_joint_converter",
+            "-c",
+            "/controller_manager",
+            "--inactive"
+        ],
+    )
+
+    rsp = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(description_launchfile),
+        launch_arguments={
+            "robot_ip": robot_ip,
+            "ur_type": ur_type,
+        }.items(),
+    )
+
     nodes_to_start = [
         control_node,
         ur_control_node,
@@ -382,6 +399,7 @@ def launch_setup(context, *args, **kwargs):
         rviz_node,
         initial_joint_controller_spawner_stopped,
         initial_joint_controller_spawner_started,
+        cartesian_to_joint_converter_spawner
     ] + controller_spawners
 
     return nodes_to_start

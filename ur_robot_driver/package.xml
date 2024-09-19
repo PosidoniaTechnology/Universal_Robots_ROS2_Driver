@@ -58,6 +58,8 @@
   <exec_depend>urdf</exec_depend>
   <exec_depend>velocity_controllers</exec_depend>
   <exec_depend>xacro</exec_depend>
+  <exec_depend>cartesian_to_joint_converter</exec_depend>
+  <exec_depend>proximity_sensor_controller</exec_depend>
 
   <test_depend>launch_testing_ament_cmake</test_depend>
 

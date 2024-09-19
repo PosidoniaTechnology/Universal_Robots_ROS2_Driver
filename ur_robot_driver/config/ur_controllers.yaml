@@ -23,6 +23,32 @@ controller_manager:
 
     forward_position_controller:
       type: position_controllers/JointGroupPositionController
+    
+    cartesian_to_joint_converter:
+      type: cartesian_to_joint_converter/CartesianToJointConverter
+
+cartesian_to_joint_converter:
+  ros__parameters:
+    joints:
+      - $(var tf_prefix)shoulder_pan_joint
+      - $(var tf_prefix)shoulder_lift_joint
+      - $(var tf_prefix)elbow_joint
+      - $(var tf_prefix)wrist_1_joint
+      - $(var tf_prefix)wrist_2_joint
+      - $(var tf_prefix)wrist_3_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+    chainable_command_interfaces:
+      - position 
+    kinematics:
+      plugin_name: kinematics_interface_kdl/KinematicsInterfaceKDL
+      plugin_package: kinematics_interface
+      base: base_link # Assumed to be stationary
+      tip: tool0
+      group_name: manipulator # Parameter not used
+      alpha: 0.0005
 
 
 speed_scaling_state_broadcaster:
@@ -57,6 +83,13 @@ joint_trajectory_controller:
       - $(var tf_prefix)wrist_1_joint
       - $(var tf_prefix)wrist_2_joint
       - $(var tf_prefix)wrist_3_joint
+    command_joints:
+      - cartesian_to_joint_converter/$(var tf_prefix)shoulder_pan_joint
+      - cartesian_to_joint_converter/$(var tf_prefix)shoulder_lift_joint
+      - cartesian_to_joint_converter/$(var tf_prefix)elbow_joint
+      - cartesian_to_joint_converter/$(var tf_prefix)wrist_1_joint
+      - cartesian_to_joint_converter/$(var tf_prefix)wrist_2_joint
+      - cartesian_to_joint_converter/$(var tf_prefix)wrist_3_joint
     command_interfaces:
       - position
     state_interfaces:
@@ -68,12 +101,12 @@ joint_trajectory_controller:
     constraints:
       stopped_velocity_tolerance: 0.2
       goal_time: 0.0
-      $(var tf_prefix)shoulder_pan_joint: { trajectory: 0.2, goal: 0.1 }
-      $(var tf_prefix)shoulder_lift_joint: { trajectory: 0.2, goal: 0.1 }
-      $(var tf_prefix)elbow_joint: { trajectory: 0.2, goal: 0.1 }
-      $(var tf_prefix)wrist_1_joint: { trajectory: 0.2, goal: 0.1 }
-      $(var tf_prefix)wrist_2_joint: { trajectory: 0.2, goal: 0.1 }
-      $(var tf_prefix)wrist_3_joint: { trajectory: 0.2, goal: 0.1 }
+      $(var tf_prefix)shoulder_pan_joint: { trajectory: 10.0, goal: 0.1 }
+      $(var tf_prefix)shoulder_lift_joint: { trajectory: 10.0, goal: 0.1 }
+      $(var tf_prefix)elbow_joint: { trajectory: 10.0, goal: 0.1 }
+      $(var tf_prefix)wrist_1_joint: { trajectory: 10.0, goal: 0.1 }
+      $(var tf_prefix)wrist_2_joint: { trajectory: 10.0, goal: 0.1 }
+      $(var tf_prefix)wrist_3_joint: { trajectory: 10.0, goal: 0.1 }
 
 
 scaled_joint_trajectory_controller:
