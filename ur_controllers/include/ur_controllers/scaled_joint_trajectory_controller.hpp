@@ -71,26 +71,8 @@ public:
   {
     scaled_param_listener_->refresh_dynamic_parameters();
     scaled_params_ = scaled_param_listener_->get_params();
-
-    bool stopped = false;
-
     stopping_scaling_factor_ = scaling_factor_;
     use_stopping_ = true;
-
-    while (!stopped && rclcpp::ok() && (traj_point_active_ptr_ != nullptr)) {
-      stopped = std::all_of(state_current_.velocities.begin(), state_current_.velocities.end(),
-                            [=](const double v) { return std::abs(v) < 1e-6; });
-
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    trajectory_msgs::msg::JointTrajectory empty_msg;
-    empty_msg.header.stamp = rclcpp::Time(0);
-
-    auto traj_msg = std::make_shared<trajectory_msgs::msg::JointTrajectory>(empty_msg);
-    add_new_trajectory_msg(traj_msg);
-
-    use_stopping_ = false;
   }
 
 protected:

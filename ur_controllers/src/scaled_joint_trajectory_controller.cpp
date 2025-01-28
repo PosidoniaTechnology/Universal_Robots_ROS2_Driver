@@ -89,7 +89,21 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
     stopping_scaling_factor_ -= scaling_factor_increment;
     stopping_scaling_factor_ = std::max(0.0, stopping_scaling_factor_);
     scaling_factor_ = stopping_scaling_factor_;
+    bool stopped = std::all_of(last_commanded_state_.velocities.begin(), last_commanded_state_.velocities.end(),
+                            [=](const double v) { return std::abs(v) < 1e-6; });
+
+    if (stopped) {
+
+      trajectory_msgs::msg::JointTrajectory empty_msg;
+      empty_msg.header.stamp = rclcpp::Time(0);
+
+      auto traj_msg = std::make_shared<trajectory_msgs::msg::JointTrajectory>(empty_msg);
+      add_new_trajectory_msg(traj_msg);
+
+      use_stopping_ = false;
+    }
   }
+
 
   if (get_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE) {
     return controller_interface::return_type::OK;
@@ -240,6 +254,12 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
 
         // store the previous command. Used in open-loop control mode
         last_commanded_state_ = state_desired_;
+        for(size_t i = 0; i < dof_; ++i)
+        {
+          last_commanded_state_.positions[i] = state_desired_.positions[i];
+          last_commanded_state_.velocities[i] = state_desired_.velocities[i]*scaling_factor_;
+          last_commanded_state_.accelerations[i] = state_desired_.accelerations[i]*scaling_factor_;
+        }
       }
 
       const auto active_goal = *rt_active_goal_.readFromRT();
