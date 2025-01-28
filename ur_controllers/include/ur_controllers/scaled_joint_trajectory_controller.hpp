@@ -120,7 +120,7 @@ protected:
 
         // Check that cancel request refers to currently active goal (if any)
         const auto active_goal = *rt_active_goal_.readFromNonRT();
-        if (active_goal && active_goal->gh_ == goal_handle)
+        if (active_goal && active_goal->gh_ == goal_handle && !use_stopping_)
         {
             // Controller uptime
             // Enter hold current position mode
