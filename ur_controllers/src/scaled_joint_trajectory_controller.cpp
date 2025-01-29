@@ -77,7 +77,10 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
                                                                           const rclcpp::Duration& period)
 {
   if (state_interfaces_.back().get_name() == scaled_params_.speed_scaling_interface_name) {
-    scaling_factor_ = state_interfaces_.back().get_value();
+    if(!use_stopping_){
+      const double target_scaling = state_interfaces_.back().get_value();
+      scaling_factor_ = 0.9 * scaling_factor_ + 0.1 * target_scaling;  // Smooth transition
+    }
   } else {
     RCLCPP_ERROR(get_node()->get_logger(), "Speed scaling interface (%s) not found in hardware interface.",
                  scaled_params_.speed_scaling_interface_name.c_str());
@@ -89,19 +92,6 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
     stopping_scaling_factor_ -= scaling_factor_increment;
     stopping_scaling_factor_ = std::max(0.0, stopping_scaling_factor_);
     scaling_factor_ = stopping_scaling_factor_;
-    bool stopped = std::all_of(last_commanded_state_.velocities.begin(), last_commanded_state_.velocities.end(),
-                            [=](const double v) { return std::abs(v) < 1e-6; });
-
-    if (stopped) {
-
-      trajectory_msgs::msg::JointTrajectory empty_msg;
-      empty_msg.header.stamp = rclcpp::Time(0);
-
-      auto traj_msg = std::make_shared<trajectory_msgs::msg::JointTrajectory>(empty_msg);
-      add_new_trajectory_msg(traj_msg);
-
-      use_stopping_ = false;
-    }
   }
 
 
@@ -254,14 +244,6 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
 
         // store the previous command. Used in open-loop control mode
         last_commanded_state_ = state_desired_;
-        for(size_t i = 0; i < dof_; ++i)
-        {
-          last_commanded_state_.positions[i] = state_desired_.positions[i];
-          last_commanded_state_.velocities[i] = state_desired_.velocities[i]*scaling_factor_;
-          state_desired_.velocities[i] = state_desired_.velocities[i]*scaling_factor_;
-          last_commanded_state_.accelerations[i] = state_desired_.accelerations[i]*scaling_factor_;
-          state_desired_.accelerations[i] = state_desired_.accelerations[i]*scaling_factor_;
-        }
       }
 
       const auto active_goal = *rt_active_goal_.readFromRT();
@@ -321,6 +303,31 @@ controller_interface::return_type ScaledJointTrajectoryController::update(const 
         set_hold_position();
         RCLCPP_ERROR(get_node()->get_logger(), "Holding position due to state tolerance violation");
       }
+    }
+  }
+
+  // write the new command to the hardware
+  if (use_stopping_){
+
+    const bool switch_trajectory = std::all_of(last_commanded_state_.velocities.begin(), last_commanded_state_.velocities.end(),
+     [=](const double v) { return std::abs(v*scaling_factor_) < 1e-6; }) &&
+      std::all_of(state_current_.velocities.begin(), state_current_.velocities.end(),
+      [=](const double v) { return std::abs(v) < 1e-6; });
+
+    if (switch_trajectory) {
+      stop_timer_ += period.seconds(); // Accumulate stop time
+    } else {
+      stop_timer_ = 0.0; // Reset if moving again
+    }
+
+    if (switch_trajectory && stop_timer_ > MIN_STOP_TIME) {
+      trajectory_msgs::msg::JointTrajectory empty_msg;
+      empty_msg.header.stamp = rclcpp::Time(0);
+
+      auto traj_msg = std::make_shared<trajectory_msgs::msg::JointTrajectory>(empty_msg);
+      add_new_trajectory_msg(traj_msg);
+
+      use_stopping_ = false;
     }
   }
 

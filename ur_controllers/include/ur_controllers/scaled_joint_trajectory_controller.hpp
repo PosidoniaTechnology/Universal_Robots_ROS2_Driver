@@ -67,12 +67,29 @@ public:
 
 
 
-  void set_hold_position() override
+  void  set_hold_position() override
   {
     scaled_param_listener_->refresh_dynamic_parameters();
     scaled_params_ = scaled_param_listener_->get_params();
     stopping_scaling_factor_ = scaling_factor_;
     use_stopping_ = true;
+  }
+
+  void  set_hold_position(bool cancel)
+  {
+    scaled_param_listener_->refresh_dynamic_parameters();
+    scaled_params_ = scaled_param_listener_->get_params();
+    stopping_scaling_factor_ = scaling_factor_;
+    use_stopping_ = true;
+
+    if (cancel){
+      while(use_stopping_){
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+
+      return;
+
+    }
   }
 
 protected:
@@ -118,6 +135,11 @@ protected:
     {
         RCLCPP_INFO(get_node()->get_logger(), "Got request to cancel goal");
 
+        if (use_stopping_){
+            RCLCPP_ERROR(get_node()->get_logger(), "Stopping active, rejecting cancel request");
+            return rclcpp_action::CancelResponse::REJECT;
+        }
+
         // Check that cancel request refers to currently active goal (if any)
         const auto active_goal = *rt_active_goal_.readFromNonRT();
         if (active_goal && active_goal->gh_ == goal_handle && !use_stopping_)
@@ -125,7 +147,7 @@ protected:
             // Controller uptime
             // Enter hold current position mode
             // can last longer so it can actually succeed in between
-            set_hold_position();
+            set_hold_position(true);
 
             RCLCPP_DEBUG(
                     get_node()->get_logger(), "Canceling active action goal because cancel callback received.");
@@ -148,6 +170,8 @@ protected:
 private:
   double scaling_factor_{};
   double stopping_scaling_factor_{};
+  double stop_timer_{0.0};
+  const double MIN_STOP_TIME = 0.1;
   std::atomic<bool> use_stopping_ = false;
   realtime_tools::RealtimeBuffer<TimeData> time_data_;
 
